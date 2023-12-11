@@ -1,18 +1,15 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Invoice.Models; 
-using Invoice.Data; 
+using Invoice.Models;
+using Invoice.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
+using Invoice.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container.
 builder.Services.AddControllers();
-
-// Configure Entity Framework Core with SQL Server
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddCors(options =>
@@ -26,19 +23,19 @@ builder.Services.AddCors(options =>
                    .AllowCredentials();
         });
 });
-// Add ASP.NET Core Identity services to the services container
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
-    // Password settings, if you want to customize them
     options.Password.RequireDigit = true;
     options.Password.RequiredLength = 8;
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequireUppercase = true;
     options.Password.RequireLowercase = false;
-    options.User.RequireUniqueEmail = true; // If you want to force emails to be unique
+    options.User.RequireUniqueEmail = true;
 })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
+builder.Services.Configure<EmailConfiguration>(builder.Configuration.GetSection("EmailConfiguration"));
+builder.Services.AddTransient<IEmailSender, EmailSender>();
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -57,18 +54,15 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidAudience = builder.Configuration["JWT:ValidAudience"],
         ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero // Optional, if you want to reduce the default leeway on token expiration times
+        ClockSkew = TimeSpan.Zero
     };
 });
-
-
-// Configure Swagger/OpenAPI
+builder.Services.AddHostedService<InvoiceReminderService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Invoice Management API", Version = "v1" });
 
-    // Add security definition for the JWT setup in Swagger UI
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
@@ -97,10 +91,8 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Use CORS policy
 app.UseCors("AllowSpecificOrigin");
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -109,7 +101,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseAuthentication(); // Make sure to call this before UseAuthorization
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
